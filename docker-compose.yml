@@ -1,0 +1,35 @@
+version: "3"
+services:
+  kong:
+    build: .
+    environment:
+        - KONG_DATABASE=off
+        - KONG_GO_PLUGINS_DIR=/app/go-plugins
+        - KONG_DECLARATIVE_CONFIG=/home/kong/config.yml
+        - KONG_PLUGINS=bundled,kong-jwt-plugin
+        - KONG_PLUGINSERVER_NAMES=kong-jwt-plugin
+        - KONG_PLUGINSERVER_KONG_JWT_PLUGIN_START_CMD=/app/go-plugins/kong-jwt-plugin
+        - KONG_PLUGINSERVER_KONG_JWT_PLUGIN_QUERY_CMD=/app/go-plugins/kong-jwt-plugin -dump
+        - KONG_PROXY_LISTEN=0.0.0.0:8000
+        - KONG_ADMIN_LISTEN=0.0.0.0:8001
+        - KONG_LOG_LEVEL=debug
+        - KONG_PROXY_ACCESS_LOG=/dev/stdout
+        - KONG_ADMIN_ACCESS_LOG=/dev/stdout
+        - KONG_PROXY_ERROR_LOG=/dev/stderr
+        - KONG_ADMIN_ERROR_LOG=/dev/stderr
+    ports:
+        - '8000:8000'
+        - '8001:8001'
+        - '8443:8443'
+        - '8444:8444'
+    restart: on-failure
+    volumes:
+        - ./config.yml:/home/kong/config.yml
+
+  echo:
+    image: ealen/echo-server
+
+  redis:
+    image: redis
+    ports:
+      - 6379:6379

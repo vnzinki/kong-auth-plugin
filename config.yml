@@ -1,0 +1,23 @@
+_format_version: "2.1"
+_transform: true
+
+services:
+  - url: http://echo
+    routes:
+      - paths:
+          - "/"
+    plugins:
+      - name: kong-jwt-plugin
+        config:
+          redis:
+            dsn: "redis:6379"
+            db: 0
+          jwt:
+            prefix: "app"
+            claims:
+              - name: "uid"
+                redis: "ban:uid:%s"
+          publickey: |
+            -----BEGIN PUBLIC KEY-----
+            1r+faxcZhXg6kSW9zVUoR+MCAwEAAQ==
+            -----END PUBLIC KEY-----

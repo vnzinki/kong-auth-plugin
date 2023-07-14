@@ -1,22 +1,14 @@
 package main
 
 import (
-	"context"
-	"crypto/rsa"
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/Kong/go-pdk"
 	"github.com/Kong/go-pdk/server"
-	"github.com/go-redis/redis/v8"
 	"github.com/golang-jwt/jwt"
 )
-
-var publickey *rsa.PublicKey
-var ctx = context.Background()
-var redisClient *redis.Client
 
 type RedisConfig struct {
 	Dsn string
@@ -37,8 +29,8 @@ type Config struct {
 }
 
 type ErrResponse struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
+	Code    int    `json:"statusCode"`
+	Message string `json:"msg"`
 }
 
 func New() interface{} {
@@ -46,25 +38,10 @@ func New() interface{} {
 }
 
 func (conf Config) Access(kong *pdk.PDK) {
-	if publickey == nil {
-		kong.Log.Info("Loading public key")
-		getKey, err := jwt.ParseRSAPublicKeyFromPEM([]byte(conf.Publickey))
-		if err != nil {
-			kong.Log.Err(err.Error())
-			panic(err)
-		}
-		publickey = getKey
-	}
-
-	if redisClient == nil {
-		kong.Log.Info(fmt.Sprintf("Connect REDIS(%s) using DB(%d)", conf.Redis.Dsn, conf.Redis.Db))
-		redisClient = redis.NewClient(&redis.Options{
-			Addr:        conf.Redis.Dsn,
-			DB:          conf.Redis.Db,
-			Password:    "",
-			DialTimeout: 300 * time.Millisecond,
-			ReadTimeout: 200 * time.Millisecond,
-		})
+	publickey, err := jwt.ParseRSAPublicKeyFromPEM([]byte(conf.Publickey))
+	if err != nil {
+		kong.Log.Err(err.Error())
+		panic(err)
 	}
 
 	for _, claim := range conf.JWT.Claims {
@@ -87,27 +64,20 @@ func (conf Config) Access(kong *pdk.PDK) {
 		return publickey, nil
 	})
 
-	if err != nil || !authToken.Valid {
-		returnError(kong, 401, "E1000")
+	if err != nil && err.Error() == "Token is expired" {
+		returnError(kong, 401, 42002, "TOKEN.EXPIRED")
 		return
 	}
-	for v := range conf.JWT.Claims {
-		if authClaims[conf.JWT.Claims[v].Name] == nil {
-			returnError(kong, 401, "E1001")
-			return
-		}
+
+	if err != nil || !authToken.Valid {
+		returnError(kong, 401, 42001, "TOKEN.INVALID")
+		return
 	}
 
-	for _, claim := range conf.JWT.Claims {
-		if claim.Redis != "" {
-			blacklistVal, err := redisClient.Get(ctx, fmt.Sprintf(claim.Redis, authClaims[claim.Name])).Result()
-			if err != nil {
-				kong.Log.Err(fmt.Sprintf("Redis ERR: %s", err.Error()))
-			}
-			if blacklistVal != "" {
-				returnError(kong, 403, "E2000")
-				return
-			}
+	for v := range conf.JWT.Claims {
+		if authClaims[conf.JWT.Claims[v].Name] == nil {
+			returnError(kong, 401, 44001, "TOKEN.CLAIM.MISSING")
+			return
 		}
 	}
 
@@ -119,13 +89,13 @@ func (conf Config) Access(kong *pdk.PDK) {
 	}
 }
 
-func returnError(kong *pdk.PDK, status int, code string) {
+func returnError(kong *pdk.PDK, status int, code int, msg string) {
 	errHeaders := make(map[string][]string)
 	errHeaders["Content-Type"] = append(errHeaders["Content-Type"], "application/json")
 
 	errBody, _ := json.Marshal(ErrResponse{
 		Code:    code,
-		Message: "Unauthorized",
+		Message: msg,
 	})
 	kong.Response.Exit(status, string(errBody), errHeaders)
 }

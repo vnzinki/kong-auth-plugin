@@ -10,7 +10,7 @@ services:
       - name: kong-jwt-plugin
         config:
           jwt:
-            prefix: "bce"
+            prefix: "prefix"
             claims:
               - name: "uid"
           publickey: |
@@ -29,5 +29,5 @@ services:
     plugins:
       - name: kong-forward-auth-plugin
         config:
-          prefix: "bce"
+          prefix: "prefix"
           uri: "http://host.docker.internal:3000/validate"
